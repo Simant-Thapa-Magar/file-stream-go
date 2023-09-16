@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"log"
@@ -9,10 +11,12 @@ import (
 	"time"
 )
 
+const PORT = ":8000"
+
 type PizzaServer struct{}
 
 func (ps *PizzaServer) start() {
-	ln, err := net.Listen("tcp", ":8000")
+	ln, err := net.Listen("tcp", PORT)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -27,14 +31,15 @@ func (ps *PizzaServer) start() {
 }
 
 func (ps *PizzaServer) readPizza(conn net.Conn) {
-	buff := make([]byte, 1024)
+	buff := new(bytes.Buffer)
 	for {
-		n, err := conn.Read(buff)
+		var size int64
+		binary.Read(conn, binary.LittleEndian, &size)
+		n, err := io.CopyN(buff, conn, size)
 		if err != nil {
 			log.Fatal(err)
 		}
-		pizza := buff[:n]
-		fmt.Println(pizza)
+		fmt.Println(buff.Bytes())
 		fmt.Printf("Received %d bytes of pizza over the network\n", n)
 	}
 }
@@ -45,11 +50,12 @@ func sendPizza(size int) error {
 	if err != nil {
 		return err
 	}
-	conn, err := net.Dial("tcp", ":8000")
+	conn, err := net.Dial("tcp", PORT)
 	if err != nil {
 		return err
 	}
-	n, err := conn.Write(pizza)
+	binary.Write(conn, binary.LittleEndian, int64(size))
+	n, err := io.CopyN(conn, bytes.NewReader(pizza), int64(size))
 	if err != nil {
 		return err
 	}
